@@ -1,0 +1,61 @@
+{
+  "name": "once-gateway",
+  "version": "0.1.0",
+  "description": "One endpoint. Any model. Use OpenClaw as your local OpenAI-compatible LLM gateway.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
+    "example": "node --env-file=.env examples/basic.mjs",
+    "example:express": "npx tsx --env-file=.env examples/express.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "openclaw",
+    "llm",
+    "openai",
+    "gateway",
+    "claude",
+    "anthropic",
+    "ai",
+    "model-routing",
+    "local-first"
+  ],
+  "author": "Alex B. <konfliktquake@gmail.com>",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "express": "^5.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abrown84/once-gateway.git"
+  },
+  "homepage": "https://github.com/abrown84/once-gateway#readme",
+  "bugs": {
+    "url": "https://github.com/abrown84/once-gateway/issues"
+  }
+}
