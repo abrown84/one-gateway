@@ -128,6 +128,49 @@ const config = getConfig(process.env);
 
 ---
 
+## Run a hardened public chat proxy
+
+Use `one-gateway/serve` to expose a chat endpoint for frontends — with rate limiting, token budgeting, and prompt injection protection baked in. System prompts live server-side only; clients send an `appId` and never touch the prompt.
+
+```ts
+import { serve, getConfig } from "one-gateway";
+
+serve(getConfig(), {
+  port: 3005,
+  allowedOrigin: "https://yourdomain.com",
+  apps: {
+    support: {
+      systemPrompt: "You are a customer support agent for Acme Corp...",
+      maxTokens: 300,
+    },
+    sales: {
+      systemPrompt: "You are the sales assistant for Acme Corp. Services cost...",
+      maxTokens: 350,
+    },
+  },
+  rateLimit: 20,       // requests per IP per minute
+  dailyTokenCap: 10000 // tokens per IP per day
+});
+```
+
+Frontend just sends:
+```js
+fetch("/api/chat", {
+  method: "POST",
+  body: JSON.stringify({ appId: "support", messages: [{ role: "user", content: "hi" }] })
+});
+```
+
+**Built-in guardrails:**
+- Per-IP rate limiting + burst protection
+- Daily token budget per IP
+- Prompt injection / jailbreak pattern blocking
+- Origin enforcement (CORS)
+- Security rules appended to every system prompt — model instructed to refuse credential/instruction disclosure
+- Message sanitization (role validation, length limits, history depth)
+
+---
+
 ## Drop into any Express app
 
 ```ts
