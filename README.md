@@ -1,6 +1,6 @@
 # one-gateway
 
-> One endpoint. Any model. Route Claude, GPT, and anything else through your local [OpenClaw](https://github.com/openclaw/openclaw) gateway — without changing a line of app code.
+> Stop setting up LLM providers for every project. One client, one token, any model.
 
 ```ts
 import { complete } from "one-gateway";
@@ -11,16 +11,14 @@ console.log(result.content);
 
 ---
 
-## The problem
+## Why this exists
 
-Every LLM integration is the same slog: hard-coded API keys, provider-specific SDKs, model names scattered across your codebase. Switch from GPT to Claude? Refactor everything. Want fallbacks? Write it yourself.
+Every time I built a new app with AI features, I had to redo the same setup: API keys per provider, different SDKs, usage limits to track, model names scattered through the codebase. Switching from GPT to Claude meant touching half the project.
 
-## The idea
-
-[OpenClaw](https://github.com/openclaw/openclaw) runs a local OpenAI-compatible gateway on your machine. It handles auth, model routing, and provider switching internally. **one-gateway** is a zero-dependency client that speaks to it — so your app only ever talks to one endpoint, and you swap models by changing a config line, not your code.
+I was already running [OpenClaw](https://github.com/openclaw/openclaw) for auth and model routing, so I built **one-gateway** — a zero-dependency client that lets any app talk to the gateway through one simple interface. Now I can test AI features across projects without redoing provider setup every time. Swap models by changing one env var. Reuse existing auth. Share one usage limit across everything.
 
 ```
-Your app → one-gateway → OpenClaw → Claude / GPT / OpenRouter / ...
+Your app → one-gateway → OpenClaw → Claude / GPT / OpenRouter / Ollama / ...
 ```
 
 ---
@@ -31,35 +29,30 @@ Your app → one-gateway → OpenClaw → Claude / GPT / OpenRouter / ...
 npm install one-gateway
 ```
 
-Requires [OpenClaw](https://github.com/openclaw/openclaw) running locally (or on your VPS with a tunnel).
+Requires [OpenClaw](https://github.com/openclaw/openclaw) running locally or on your VPS.
 
 ---
 
 ## Quick start
 
-### 1. Get your gateway token
+### 1. Set env vars
 
 ```bash
-# In your openclaw.json → gateway.auth.token
-# Or run: openclaw gateway status
+ONE_GATEWAY_TOKEN=your_openclaw_gateway_token
+ONE_GATEWAY_URL=http://127.0.0.1:18789   # default
 ```
 
-### 2. Set env vars
-
-```bash
-cp .env.example .env
-# Set ONE_GATEWAY_TOKEN=your_token_here
-```
-
-### 3. Call it
+### 2. Call it
 
 ```ts
 import { complete } from "one-gateway";
 
 const { content, model } = await complete("What's 2 + 2?");
 // content: "4"
-// model:   "openclaw" (or whatever OpenClaw routed to)
+// model:   "openclaw"
 ```
+
+That's it. OpenClaw handles which provider and model actually runs it.
 
 ---
 
@@ -71,13 +64,13 @@ Send a prompt. Returns the first successful response across primary + fallback m
 
 ```ts
 const result = await complete("Write a haiku about TypeScript", {
-  model: "openclaw",         // optional override
-  temperature: 0.7,          // optional
-  maxTokens: 200,            // optional
+  model: "openclaw",      // optional override
+  temperature: 0.7,
+  maxTokens: 200,
 });
 ```
 
-**Multi-turn conversations:**
+**Multi-turn:**
 
 ```ts
 const result = await complete("", {
@@ -92,7 +85,7 @@ const result = await complete("", {
 
 ### `createClient(config)`
 
-Create a reusable client with explicit config — useful when you don't want to rely on env vars.
+Reusable client with explicit config — useful when you don't want env vars.
 
 ```ts
 import { createClient } from "one-gateway";
@@ -101,7 +94,7 @@ const llm = createClient({
   token: "your_gateway_token",
   baseUrl: "http://127.0.0.1:18789",
   primaryModel: "openclaw",
-  agentId: "main",           // route to a specific OpenClaw agent
+  agentId: "main",   // route to a specific OpenClaw agent
 });
 
 const result = await llm.complete("What time is it on Mars?");
@@ -111,11 +104,10 @@ const result = await llm.complete("What time is it on Mars?");
 
 ### `getConfig(env?)`
 
-Read config from environment variables. Useful for building your own client.
+Read config from environment. Useful for building your own wrapper.
 
 ```ts
 import { getConfig } from "one-gateway";
-
 const config = getConfig(process.env);
 ```
 
@@ -125,20 +117,18 @@ const config = getConfig(process.env);
 |---|---|---|
 | `ONE_GATEWAY_TOKEN` | *(required)* | Your OpenClaw gateway token |
 | `ONE_GATEWAY_URL` | `http://127.0.0.1:18789` | Gateway base URL |
-| `ONE_GATEWAY_MODEL` | `openclaw` | Primary model field |
+| `ONE_GATEWAY_MODEL` | `openclaw` | Primary model |
 | `ONE_GATEWAY_FALLBACKS` | *(none)* | Comma-separated fallback models |
-| `ONE_GATEWAY_AGENT` | `main` | OpenClaw agent/session ID |
+| `ONE_GATEWAY_AGENT` | `main` | OpenClaw agent ID |
 | `ONE_GATEWAY_TEMPERATURE` | `0.2` | Temperature |
 | `ONE_GATEWAY_MAX_TOKENS` | `500` | Max tokens |
 | `ONE_GATEWAY_TIMEOUT_MS` | `45000` | Request timeout |
 
-> Legacy `OPENCLAW_*` env vars are also supported as fallbacks.
+> Legacy `OPENCLAW_*` env vars also supported as fallbacks.
 
 ---
 
-## Express example
-
-Drop this into any Express app:
+## Drop into any Express app
 
 ```ts
 import express from "express";
@@ -157,14 +147,13 @@ See [`examples/express.ts`](./examples/express.ts) for a full working version.
 
 ---
 
-## Why OpenClaw?
+## What you get with OpenClaw
 
-OpenClaw gives you:
-- **Local-first** — gateway runs on your machine or VPS, your data never leaves
-- **One token** — single auth layer for all providers
-- **OAuth profiles** — route to Codex, Claude, OpenRouter without managing multiple keys
-- **Agent routing** — `agentId` lets you target different OpenClaw agents from the same app
-- **Model fallbacks** — OpenClaw handles retry/routing; one-gateway handles the client side
+- **One token** — single auth layer across all providers
+- **Model swapping** — change the model in config, not in code
+- **OAuth profiles** — Codex, Claude, OpenRouter without managing multiple keys
+- **Agent routing** — target different OpenClaw agents from the same app
+- **Local-first** — gateway on your machine or VPS, data stays yours
 
 [Get OpenClaw →](https://github.com/openclaw/openclaw)
 

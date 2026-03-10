@@ -1,7 +1,7 @@
 {
   "name": "one-gateway",
-  "version": "0.1.0",
-  "description": "One endpoint. Any model. Use OpenClaw as your local OpenAI-compatible LLM gateway.",
+  "version": "0.2.0",
+  "description": "Stop setting up LLM providers for every project. One client, one token, any model — via OpenClaw gateway.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
