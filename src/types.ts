@@ -39,6 +39,16 @@ export type AppConfig = {
   maxTokens?: number;
 };
 
+export type ConversationEvent = {
+  appId: string;
+  ipHash: string;
+  messages: ChatMessage[];
+  response: string;
+  model: string;
+  tokensUsed: number;
+  timestamp: number;
+};
+
 export type ServeOptions = {
   /** Port to listen on (default: 3005) */
   port?: number;
@@ -60,4 +70,6 @@ export type ServeOptions = {
   dailyTokenCap?: number;
   /** Extra blocked patterns in addition to built-ins */
   blockedPatterns?: RegExp[];
+  /** Optional callback fired after every successful LLM response */
+  onComplete?: (event: ConversationEvent) => void | Promise<void>;
 };

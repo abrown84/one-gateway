@@ -1,5 +1,6 @@
 import http from "node:http";
-import type { GatewayConfig, ServeOptions } from "./types.js";
+import crypto from "node:crypto";
+import type { GatewayConfig, ServeOptions, ConversationEvent } from "./types.js";
 
 // ── Built-in security rules appended to every system prompt ──────────────────
 const SECURITY_RULES = `
@@ -108,6 +109,7 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions): http.Se
     burstLimit     = 5,
     dailyTokenCap  = 10_000,
     blockedPatterns = [],
+    onComplete,
   } = opts;
 
   const allBlocked = [...BUILT_IN_BLOCKED, ...blockedPatterns];
@@ -211,9 +213,27 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions): http.Se
 
       const data = await upstream.json() as { choices?: { message?: { content?: string } }[]; usage?: { total_tokens?: number } };
       const content = data.choices?.[0]?.message?.content ?? "No response.";
-      s.dailyTokens += data.usage?.total_tokens ?? estimatedTokens;
+      const tokensUsed = data.usage?.total_tokens ?? estimatedTokens;
+      s.dailyTokens += tokensUsed;
 
       jsonRes(res, 200, { content });
+
+      // Fire onComplete hook asynchronously — don't block response
+      if (onComplete) {
+        const ipHash = crypto.createHash("sha256").update(ip).digest("hex").slice(0, 16);
+        const event: ConversationEvent = {
+          appId,
+          ipHash,
+          messages: [...messages as import("./types.js").ChatMessage[], { role: "assistant" as const, content }],
+          response: content,
+          model,
+          tokensUsed,
+          timestamp: Date.now(),
+        };
+        Promise.resolve(onComplete(event)).catch(e =>
+          console.error("[one-gateway/serve] onComplete error:", (e as Error).message)
+        );
+      }
 
     } catch (e) {
       console.error("[one-gateway/serve] Error:", (e as Error).message);
