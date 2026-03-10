@@ -1,5 +1,5 @@
 {
-  "name": "once-gateway",
+  "name": "one-gateway",
   "version": "0.1.0",
   "description": "One endpoint. Any model. Use OpenClaw as your local OpenAI-compatible LLM gateway.",
   "type": "module",
@@ -52,10 +52,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/abrown84/once-gateway.git"
+    "url": "https://github.com/abrown84/one-gateway.git"
   },
-  "homepage": "https://github.com/abrown84/once-gateway#readme",
+  "homepage": "https://github.com/abrown84/one-gateway#readme",
   "bugs": {
-    "url": "https://github.com/abrown84/once-gateway/issues"
+    "url": "https://github.com/abrown84/one-gateway/issues"
   }
 }

@@ -31,8 +31,8 @@ app.post("/api/llm", async (req, res) => {
 
 // Option B: createClient() for explicit config
 const llm = createClient({
-  token: process.env.ONCE_GATEWAY_TOKEN!,
-  baseUrl: process.env.ONCE_GATEWAY_URL ?? "http://127.0.0.1:18789",
+  token: process.env.ONE_GATEWAY_TOKEN!,
+  baseUrl: process.env.ONE_GATEWAY_URL ?? "http://127.0.0.1:18789",
 });
 
 app.post("/api/llm/v2", async (req, res) => {
@@ -51,4 +51,4 @@ app.post("/api/llm/v2", async (req, res) => {
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 const port = Number(process.env.PORT ?? 3333);
-app.listen(port, () => console.log(`once-gateway express example → http://localhost:${port}`));
+app.listen(port, () => console.log(`one-gateway express example → http://localhost:${port}`));
