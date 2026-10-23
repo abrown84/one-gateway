@@ -137,7 +137,8 @@ import { serve, getConfig } from "one-gateway";
 
 serve(getConfig(), {
   port: 3005,
-  allowedOrigin: "https://yourdomain.com",
+  allowedOrigin: "https://yourdomain.com", // required in production — do not use "*"
+  // trustProxy: true,  // only behind a trusted reverse proxy
   apps: {
     support: {
       systemPrompt: "You are a customer support agent for Acme Corp...",
@@ -162,16 +163,21 @@ fetch("/api/chat", {
 ```
 
 **Built-in guardrails:**
-- Per-IP rate limiting + burst protection
+- Per-IP rate limiting + burst protection (enable `trustProxy` only behind a trusted proxy)
 - Daily token budget per IP
 - Prompt injection / jailbreak pattern blocking
-- Origin enforcement (CORS)
+- Origin enforcement (CORS) — set `allowedOrigin` to your site in production
 - Security rules appended to every system prompt — model instructed to refuse credential/instruction disclosure
 - Message sanitization (role validation, length limits, history depth)
+- Gateway URL / header validation (TLS for remote, no CR/LF header injection)
 
 ---
 
 ## Drop into any Express app
+
+> **Security:** Never expose `complete()` behind an unauthenticated public route.
+> That turns your gateway token into an open LLM proxy. Authenticate callers,
+> do not accept client-chosen models/limits, and prefer [`one-gateway/serve`](#run-a-hardened-public-chat-proxy) for browser-facing chat.
 
 ```ts
 import express from "express";
@@ -180,13 +186,13 @@ import { complete } from "one-gateway";
 const app = express();
 app.use(express.json());
 
-app.post("/api/llm", async (req, res) => {
+app.post("/api/llm", requireAuth, async (req, res) => {
   const result = await complete(req.body.prompt);
   res.json({ content: result.content, model: result.model });
 });
 ```
 
-See [`examples/express.ts`](./examples/express.ts) for a full working version.
+See [`examples/express.ts`](./examples/express.ts) for a local demo that requires `PROXY_API_KEY`.
 
 ---
 

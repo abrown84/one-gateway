@@ -1,4 +1,5 @@
 import type { GatewayConfig } from "./types.js";
+import { validateGatewayConfig } from "./validate.js";
 
 function parseFallbacks(v = ""): string[] {
   return v.split(",").map((s) => s.trim()).filter(Boolean);
@@ -12,7 +13,7 @@ export function getConfig(env: Record<string, string | undefined> = process.env)
     );
   }
 
-  return {
+  return validateGatewayConfig({
     baseUrl: env.ONE_GATEWAY_URL ?? env.OPENCLAW_BASE_URL ?? "http://127.0.0.1:18789",
     token,
     primaryModel: env.ONE_GATEWAY_MODEL ?? env.OPENCLAW_MODEL_PRIMARY ?? "openclaw",
@@ -21,5 +22,5 @@ export function getConfig(env: Record<string, string | undefined> = process.env)
     temperature: Number(env.ONE_GATEWAY_TEMPERATURE ?? env.OPENCLAW_TEMPERATURE ?? 0.2),
     maxTokens: Number(env.ONE_GATEWAY_MAX_TOKENS ?? env.OPENCLAW_MAX_TOKENS ?? 500),
     timeoutMs: Number(env.ONE_GATEWAY_TIMEOUT_MS ?? env.OPENCLAW_TIMEOUT_MS ?? 45000),
-  };
+  });
 }

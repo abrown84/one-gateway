@@ -54,8 +54,17 @@ export type ServeOptions = {
   port?: number;
   /** Host to bind (default: 127.0.0.1) */
   host?: string;
-  /** Allowed CORS origin (default: * — restrict in production) */
+  /**
+   * Allowed CORS origin. Default: `*` (dev only).
+   * Production deployments should set an exact origin (e.g. `https://acme.com`).
+   */
   allowedOrigin?: string;
+  /**
+   * When true, client IP is taken from `X-Forwarded-For` (first hop).
+   * Default false — enable only behind a trusted reverse proxy, otherwise
+   * clients can spoof IPs and bypass rate limits.
+   */
+  trustProxy?: boolean;
   /** Per-app system prompt configs keyed by appId */
   apps: Record<string, AppConfig>;
   /** Default appId when none provided (default: first key in apps) */

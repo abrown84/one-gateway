@@ -1,6 +1,7 @@
 import http from "node:http";
 import crypto from "node:crypto";
 import type { GatewayConfig, ServeOptions, ConversationEvent } from "./types.js";
+import { validateGatewayConfig } from "./validate.js";
 
 // ── Built-in security rules appended to every system prompt ──────────────────
 const SECURITY_RULES = `
@@ -50,9 +51,12 @@ function makeStore() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function getIP(req: http.IncomingMessage): string {
-  return (req.headers["x-forwarded-for"] as string || "").split(",")[0].trim()
-    || req.socket.remoteAddress || "unknown";
+function getIP(req: http.IncomingMessage, trustProxy: boolean): string {
+  if (trustProxy) {
+    const forwarded = (req.headers["x-forwarded-for"] as string || "").split(",")[0].trim();
+    if (forwarded) return forwarded;
+  }
+  return req.socket.remoteAddress || "unknown";
 }
 
 function jsonRes(res: http.ServerResponse, status: number, obj: unknown) {
@@ -98,10 +102,13 @@ function readBody(req: http.IncomingMessage, maxBytes = 8192): Promise<string> {
  * ```
  */
 export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions): http.Server {
+  const safeConfig = validateGatewayConfig(gatewayConfig);
+
   const {
     port           = 3005,
     host           = "127.0.0.1",
     allowedOrigin  = "*",
+    trustProxy     = false,
     apps,
     defaultApp     = Object.keys(apps)[0],
     rateLimit      = 20,
@@ -111,6 +118,17 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions): http.Se
     blockedPatterns = [],
     onComplete,
   } = opts;
+
+  if (!apps || Object.keys(apps).length === 0) {
+    throw new Error("serve(): opts.apps must contain at least one app config");
+  }
+
+  if (allowedOrigin === "*" && host !== "127.0.0.1" && host !== "localhost" && host !== "::1") {
+    console.warn(
+      "[one-gateway/serve] WARNING: allowedOrigin is '*' while binding a non-loopback host. " +
+      "Set allowedOrigin to your frontend origin before exposing this publicly."
+    );
+  }
 
   const allBlocked = [...BUILT_IN_BLOCKED, ...blockedPatterns];
   const store = makeStore();
@@ -125,6 +143,7 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions): http.Se
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "no-referrer");
 
     if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
     if (req.method !== "POST" || req.url !== "/api/chat") {
@@ -136,7 +155,7 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions): http.Se
       return jsonRes(res, 403, { error: "Forbidden." });
     }
 
-    const ip = getIP(req);
+    const ip = getIP(req, trustProxy);
     const s = store.get(ip, rateWindowMs);
 
     if (s.count >= rateLimit)       return jsonRes(res, 429, { error: "Too many requests. Slow down." });
@@ -150,7 +169,12 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions): http.Se
       const raw = await readBody(req).catch(() => null);
       if (!raw) return jsonRes(res, 400, { error: "Request body too large." });
 
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        return jsonRes(res, 400, { error: "Invalid JSON body." });
+      }
 
       // appId selects the server-side system prompt — client cannot override
       const appId = typeof parsed.appId === "string" && apps[parsed.appId]
@@ -173,8 +197,8 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions): http.Se
         return jsonRes(res, 400, { error: "Let's keep it on topic." });
       }
 
-      const model     = appCfg.model     ?? gatewayConfig.primaryModel;
-      const maxTokens = appCfg.maxTokens ?? gatewayConfig.maxTokens;
+      const model     = appCfg.model     ?? safeConfig.primaryModel;
+      const maxTokens = appCfg.maxTokens ?? safeConfig.maxTokens;
 
       const estimatedTokens = messages.reduce((a, m) => a + Math.ceil(m.content.length / 4), 0) + maxTokens;
       if (s.dailyTokens + estimatedTokens > dailyTokenCap) {
@@ -191,14 +215,14 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions): http.Se
       };
 
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), gatewayConfig.timeoutMs);
+      const timer = setTimeout(() => controller.abort(), safeConfig.timeoutMs);
 
-      const upstream = await fetch(`${gatewayConfig.baseUrl}/v1/chat/completions`, {
+      const upstream = await fetch(`${safeConfig.baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${gatewayConfig.token}`,
+          Authorization: `Bearer ${safeConfig.token}`,
           "Content-Type": "application/json",
-          "x-openclaw-agent-id": gatewayConfig.agentId,
+          "x-openclaw-agent-id": safeConfig.agentId,
         },
         body: JSON.stringify(payload),
         signal: controller.signal,
@@ -237,7 +261,7 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions): http.Se
 
     } catch (e) {
       console.error("[one-gateway/serve] Error:", (e as Error).message);
-      jsonRes(res, 500, { error: "Internal error." });
+      if (!res.headersSent) jsonRes(res, 500, { error: "Internal error." });
     } finally {
       s.concurrent--;
     }
@@ -246,6 +270,7 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions): http.Se
   server.listen(port, host, () => {
     console.log(`[one-gateway/serve] Listening on ${host}:${port}`);
     console.log(`[one-gateway/serve] Apps: ${Object.keys(apps).join(", ")}`);
+    if (trustProxy) console.log("[one-gateway/serve] trustProxy enabled — using X-Forwarded-For");
   });
 
   return server;
