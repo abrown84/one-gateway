@@ -26,9 +26,11 @@
   "scripts": {
     "build": "tsup src/index.ts src/serve.ts --format esm,cjs --dts",
     "dev": "tsup src/index.ts src/serve.ts --format esm,cjs --dts --watch",
+    "test": "tsx --test src/validate.test.ts src/serve.security.test.ts",
     "example": "node --env-file=.env examples/basic.mjs",
     "example:express": "npx tsx --env-file=.env examples/express.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "audit": "npm audit --audit-level=high"
   },
   "keywords": [
     "openclaw",
@@ -43,7 +45,6 @@
   ],
   "author": "Alex B. <konfliktquake@gmail.com>",
   "license": "MIT",
-  "dependencies": {},
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
@@ -62,5 +63,8 @@
   "homepage": "https://github.com/abrown84/one-gateway#readme",
   "bugs": {
     "url": "https://github.com/abrown84/one-gateway/issues"
+  },
+  "overrides": {
+    "esbuild": ">=0.28.1"
   }
 }

@@ -2,3 +2,9 @@ export type { ChatMessage, GatewayConfig, CompletionResult, CompleteOptions, App
 export { complete, createClient } from "./client.js";
 export { getConfig } from "./config.js";
 export { serve } from "./serve.js";
+export {
+  validateBaseUrl,
+  validateGatewayConfig,
+  sanitizeHeaderValue,
+  redactSecrets,
+} from "./validate.js";
