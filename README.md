@@ -205,3 +205,7 @@ See [`examples/express.ts`](./examples/express.ts) for a full working version.
 ## License
 
 MIT — [Brown Industries](https://brwnindustries.com)
+
+---
+
+Built by [Brown Industries](https://brwnindustries.com) · [Book an AI Ops Audit](https://brwnindustries.com/ai-ops)
