@@ -59,6 +59,12 @@ describe("serve demo / playground", () => {
       assert.match(html, /Want one set up for your app\? Brown Industries/);
       assert.match(html, /https:\/\/brwnindustries\.com/);
       assert.match(html, /Built by/);
+      // Base-path-aware OpenAI-compatible sample (no client auth required)
+      assert.match(html, /location\.pathname\.replace/);
+      assert.match(html, /\/v1\/chat\/completions/);
+      assert.match(html, /gemini-3\.8-flash/);
+      assert.match(html, /no auth token required/i);
+      assert.doesNotMatch(html, /\$\{origin\}\/api\/chat/);
       assert.doesNotMatch(html, /upstream-secret-key/);
       assert.doesNotMatch(html, /\$\d|price|pricing/i);
     } finally {

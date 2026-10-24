@@ -476,28 +476,30 @@ export function renderPlaygroundPage(opts: PlaygroundPageOpts): string {
     const MAX_PROMPT = ${opts.maxPromptChars};
     const AUTH_REQUIRED = ${opts.authRequired ? "true" : "false"};
 
-    const origin = location.origin;
+    // Base-path aware: under nginx rewrite mounts (e.g. /labs/one-gateway),
+    // location.origin alone would omit the prefix.
+    const base =
+      location.origin +
+      location.pathname.replace(/\\/index\\.html$/i, "").replace(/\\/$/, "");
     const examples = {
       fetch: \`// Point your app at this gateway (OpenAI-compatible)
-const res = await fetch("\${origin}/api/chat", {
+// e.g. https://brwnindustries.com/labs/one-gateway/v1/chat/completions
+const res = await fetch("\${base}/v1/chat/completions", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    appId: "playground",
     model: "\${DEFAULT_MODEL}",
-    stream: true,
     messages: [{ role: "user", content: "Hello from my app" }],
   }),
 });
-// For SSE: read res.body; for JSON omit stream or set stream: false
 const data = await res.json();
-console.log(data.content);\`,
+console.log(data.choices[0].message.content);\`,
       sdk: \`import OpenAI from "openai";
 
-// Drop-in: same SDK, your gateway as baseURL
+// Drop-in: same SDK, your gateway as baseURL (no auth token required)
 const client = new OpenAI({
-  apiKey: process.env.ONE_GATEWAY_CLIENT_KEY || "not-needed-for-public-demo",
-  baseURL: "\${origin}/v1",
+  apiKey: "unused",
+  baseURL: "\${base}/v1",
 });
 
 const completion = await client.chat.completions.create({
@@ -507,10 +509,10 @@ const completion = await client.chat.completions.create({
 console.log(completion.choices[0].message.content);\`,
       py: \`from openai import OpenAI
 
-# Drop-in: same SDK, your gateway as base_url
+# Drop-in: same SDK, your gateway as base_url (no auth token required)
 client = OpenAI(
-    api_key="not-needed-for-public-demo",
-    base_url="\${origin}/v1",
+    api_key="unused",
+    base_url="\${base}/v1",
 )
 
 r = client.chat.completions.create(
@@ -518,10 +520,9 @@ r = client.chat.completions.create(
     messages=[{"role": "user", "content": "Hello from my app"}],
 )
 print(r.choices[0].message.content)\`,
-      curl: \`curl "\${origin}/api/chat" \\\\
+      curl: \`curl "\${base}/v1/chat/completions" \\\\
   -H "Content-Type: application/json" \\\\
   -d '{
-    "appId": "playground",
     "model": "\${DEFAULT_MODEL}",
     "messages": [{"role": "user", "content": "Hello from my app"}]
   }'\`,
@@ -597,11 +598,10 @@ print(r.choices[0].message.content)\`,
       outEl.appendChild(cursor);
 
       try {
-        const res = await fetch("/api/chat", {
+        const res = await fetch(base + "/v1/chat/completions", {
           method: "POST",
           headers: authHeaders(),
           body: JSON.stringify({
-            appId: "playground",
             model: modelEl.value,
             stream: true,
             messages: [{ role: "user", content: prompt.slice(0, MAX_PROMPT) }],
