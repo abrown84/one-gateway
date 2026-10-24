@@ -1,11 +1,14 @@
 {
   "name": "one-gateway",
-  "version": "0.3.0",
-  "description": "Stop setting up LLM providers for every project. One client, one token, any model — via OpenClaw gateway.",
+  "version": "0.4.0",
+  "description": "Drop-in OpenAI-compatible AI backend for any app — one base URL, swap models without code changes, with rate limits and security hardening. Gemini by default; OpenClaw optional.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "one-gateway-serve": "./bin/one-gateway-serve.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -20,28 +23,35 @@
   },
   "files": [
     "dist",
+    "bin",
+    "scripts",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "Dockerfile",
+    "examples"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/serve.ts --format esm,cjs --dts",
-    "dev": "tsup src/index.ts src/serve.ts --format esm,cjs --dts --watch",
-    "test": "tsx --test src/validate.test.ts src/serve.security.test.ts",
+    "build": "tsup src/index.ts src/serve.ts src/bin/serve.ts --format esm,cjs --dts",
+    "dev": "tsup src/index.ts src/serve.ts src/bin/serve.ts --format esm,cjs --dts --watch",
+    "test": "tsx --test src/validate.test.ts src/serve.security.test.ts src/upstream.test.ts src/client.upstream.test.ts src/serve.demo.test.ts",
+    "serve": "tsx --env-file-if-exists=.env src/bin/serve.ts",
+    "smoke": "node scripts/smoke.mjs",
     "example": "node --env-file=.env examples/basic.mjs",
     "example:express": "npx tsx --env-file=.env examples/express.ts",
     "prepublishOnly": "npm run build",
     "audit": "npm audit --audit-level=high"
   },
   "keywords": [
-    "openclaw",
+    "openai-compatible",
+    "gemini",
     "llm",
     "openai",
     "gateway",
-    "claude",
-    "anthropic",
-    "ai",
-    "model-routing",
-    "local-first"
+    "ai-backend",
+    "openclaw",
+    "embeddings",
+    "rate-limit",
+    "model-routing"
   ],
   "author": "Alex B. <konfliktquake@gmail.com>",
   "license": "MIT",

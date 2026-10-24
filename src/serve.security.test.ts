@@ -8,6 +8,7 @@ const baseConfig: GatewayConfig = {
   baseUrl: "http://127.0.0.1:18789",
   token: "test-token",
   primaryModel: "openclaw",
+  embeddingModel: "gemini-embedding-2",
   fallbackModels: [],
   agentId: "main",
   temperature: 0.2,

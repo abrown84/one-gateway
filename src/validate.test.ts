@@ -80,7 +80,33 @@ describe("validateGatewayConfig / getConfig", () => {
   });
 
   it("rejects missing token", () => {
-    assert.throws(() => getConfig({}), /Missing gateway token/);
+    assert.throws(() => getConfig({}), /Missing API key/);
+  });
+
+  it("defaults to Gemini OpenAI-compatible upstream", () => {
+    const cfg = getConfig({
+      GEMINI_API_KEY: "gemini-test-key",
+    });
+    assert.equal(
+      cfg.baseUrl,
+      "https://generativelanguage.googleapis.com/v1beta/openai"
+    );
+    assert.equal(cfg.primaryModel, "gemini-3.8-flash");
+    assert.equal(cfg.embeddingModel, "gemini-embedding-2");
+    assert.equal(cfg.agentId, "");
+  });
+
+  it("accepts ONE_GATEWAY_API_KEY and UPSTREAM_URL", () => {
+    const cfg = getConfig({
+      ONE_GATEWAY_API_KEY: "k",
+      ONE_GATEWAY_UPSTREAM_URL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+      ONE_GATEWAY_MODEL: "gemini-3.8-flash",
+    });
+    assert.equal(
+      cfg.baseUrl,
+      "https://generativelanguage.googleapis.com/v1beta/openai"
+    );
+    assert.equal(cfg.token, "k");
   });
 
   it("rejects header-injectable agent id from env", () => {
@@ -101,6 +127,7 @@ describe("validateGatewayConfig / getConfig", () => {
           baseUrl: "http://127.0.0.1:18789",
           token: "tok",
           primaryModel: "openclaw",
+          embeddingModel: "gemini-embedding-2",
           fallbackModels: [],
           agentId: "main",
           temperature: Number("nope"),

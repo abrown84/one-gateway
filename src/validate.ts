@@ -83,8 +83,17 @@ function clamp(n: number, min: number, max: number): number {
  */
 export function validateGatewayConfig(config: GatewayConfig): GatewayConfig {
   const token = sanitizeHeaderValue(config.token, "token");
-  const agentId = sanitizeHeaderValue(config.agentId, "agentId");
+  // agentId is optional — empty means "do not send OpenClaw agent header"
+  const agentIdRaw = config.agentId ?? "";
+  const agentId =
+    typeof agentIdRaw === "string" && agentIdRaw.trim() === ""
+      ? ""
+      : sanitizeHeaderValue(agentIdRaw, "agentId");
   const primaryModel = sanitizeHeaderValue(config.primaryModel, "primaryModel");
+  const embeddingModel = sanitizeHeaderValue(
+    config.embeddingModel || "gemini-embedding-2",
+    "embeddingModel"
+  );
 
   const fallbackModels = (config.fallbackModels ?? []).map((m, i) =>
     sanitizeHeaderValue(m, `fallbackModels[${i}]`)
@@ -98,6 +107,7 @@ export function validateGatewayConfig(config: GatewayConfig): GatewayConfig {
     baseUrl: validateBaseUrl(config.baseUrl),
     token,
     primaryModel,
+    embeddingModel,
     fallbackModels,
     agentId,
     temperature,
