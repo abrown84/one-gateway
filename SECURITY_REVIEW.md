@@ -40,7 +40,7 @@ This PR hardens validation, secret redaction, `serve` proxy trust, the Express e
 | M3 | **Invalid JSON in `serve` returned generic 500.** | **Fixed** — explicit `400 Invalid JSON body.` |
 | M4 | **DevDependency audit: critical/high vulns** (`proxy-addr`, `path-to-regexp`, `picomatch`, etc. via Express/tsup). Runtime package has **no** production dependencies, but examples/CI were exposed. | **Fixed** — `npm audit fix` + `overrides.esbuild`; CI runs `npm audit --audit-level=high`. |
 | M5 | **Prompt-injection defenses are regex denylists.** Easily bypassed with paraphrase / encoding; useful as a speed bump only. | **Open** — document as defense-in-depth, not a guarantee. |
-| M6 | **No auth on `serve` `/api/chat`.** Relies on origin + rate limits. Origin can be omitted by non-browser clients. | **Open** — add optional API keys / JWT for product tier. |
+| M6 | **`serve` is a public demo by default** (no client auth). Relies on rate limits, daily caps, model allowlist, prompt/output clamps. Origin can be omitted by non-browser clients. | **Mitigated** — demo bill guards + optional `authKey` / `ONE_GATEWAY_SERVE_AUTH_KEY` (default off). Upstream keys remain server-side. |
 
 ### Low
 

@@ -1,6 +1,31 @@
-import type { ChatMessage, GatewayConfig, CompletionResult, CompleteOptions } from "./types.js";
+import type {
+  ChatMessage,
+  GatewayConfig,
+  CompletionResult,
+  CompleteOptions,
+  EmbeddingResult,
+  EmbedOptions,
+} from "./types.js";
 import { getConfig } from "./config.js";
 import { attachErrorDetails, validateGatewayConfig } from "./validate.js";
+import {
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_EMBEDDING_MODEL,
+  GEMINI_OPENAI_BASE,
+  chatCompletionsUrl,
+  embeddingsUrl,
+} from "./upstream.js";
+
+function authHeaders(config: GatewayConfig): Record<string, string> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${config.token}`,
+    "Content-Type": "application/json",
+  };
+  if (config.agentId) {
+    headers["x-openclaw-agent-id"] = config.agentId;
+  }
+  return headers;
+}
 
 async function callOnce(args: {
   config: GatewayConfig;
@@ -12,13 +37,9 @@ async function callOnce(args: {
 }): Promise<CompletionResult> {
   const { config, model, messages, temperature, maxTokens, signal } = args;
 
-  const res = await fetch(`${config.baseUrl}/v1/chat/completions`, {
+  const res = await fetch(chatCompletionsUrl(config.baseUrl), {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.token}`,
-      "Content-Type": "application/json",
-      "x-openclaw-agent-id": config.agentId,
-    },
+    headers: authHeaders(config),
     body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
     signal,
   });
@@ -42,7 +63,8 @@ async function callOnce(args: {
 }
 
 /**
- * Send a prompt through your OpenClaw gateway with automatic fallback support.
+ * Send a prompt through the configured upstream (Gemini by default, or OpenClaw)
+ * with automatic fallback support.
  *
  * @example
  * ```ts
@@ -116,22 +138,69 @@ export async function complete(
 }
 
 /**
+ * Create an embedding via the upstream OpenAI-compatible embeddings endpoint
+ * (Gemini: `gemini-embedding-2` / `gemini-embedding-2-preview`).
+ */
+export async function embed(
+  input: string | string[],
+  opts?: EmbedOptions
+): Promise<EmbeddingResult> {
+  const config = opts?.config ?? getConfig();
+  const model = opts?.model ?? config.embeddingModel;
+
+  if (opts?.model != null) {
+    if (typeof opts.model !== "string" || /[\x00-\x1f\x7f]/.test(opts.model)) {
+      throw new Error("Invalid model: contains control characters");
+    }
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.timeoutMs);
+  try {
+    const res = await fetch(embeddingsUrl(config.baseUrl), {
+      method: "POST",
+      headers: authHeaders(config),
+      body: JSON.stringify({ model, input }),
+      signal: controller.signal,
+    });
+
+    const text = await res.text();
+    let json: unknown;
+    try { json = JSON.parse(text); } catch { json = { raw: text.slice(0, 2048) }; }
+
+    if (!res.ok) {
+      throw attachErrorDetails(new Error(`HTTP ${res.status} for embeddings model=${model}`), json);
+    }
+
+    const embedding = (json as { data?: { embedding?: number[] }[] })?.data?.[0]?.embedding;
+    if (!Array.isArray(embedding) || embedding.length === 0) {
+      throw attachErrorDetails(new Error(`Empty embedding for model=${model}`), json);
+    }
+
+    return { model, embedding, raw: json };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Create a reusable client bound to a specific config.
  *
  * @example
  * ```ts
  * import { createClient } from "one-gateway";
  *
- * const llm = createClient({ token: "...", baseUrl: "http://127.0.0.1:18789" });
+ * const llm = createClient({ token: process.env.GEMINI_API_KEY! });
  * const result = await llm.complete("What's the weather like on Mars?");
  * ```
  */
 export function createClient(config: Partial<GatewayConfig> & { token: string }) {
   const merged = validateGatewayConfig({
-    baseUrl: "http://127.0.0.1:18789",
-    primaryModel: "openclaw",
+    baseUrl: GEMINI_OPENAI_BASE,
+    primaryModel: DEFAULT_CHAT_MODEL,
+    embeddingModel: DEFAULT_EMBEDDING_MODEL,
     fallbackModels: [],
-    agentId: "main",
+    agentId: "",
     temperature: 0.2,
     maxTokens: 500,
     timeoutMs: 45000,
@@ -141,5 +210,7 @@ export function createClient(config: Partial<GatewayConfig> & { token: string })
   return {
     complete: (prompt: string, opts?: Omit<CompleteOptions, "config">) =>
       complete(prompt, { ...opts, config: merged }),
+    embed: (input: string | string[], opts?: Omit<EmbedOptions, "config">) =>
+      embed(input, { ...opts, config: merged }),
   };
 }

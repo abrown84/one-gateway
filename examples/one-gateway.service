@@ -1,0 +1,37 @@
+# systemd unit example — run one-gateway serve on a Linux VPS behind a reverse proxy.
+#
+# Install:
+#   sudo cp examples/one-gateway.service /etc/systemd/system/one-gateway.service
+#   sudo mkdir -p /etc/one-gateway
+#   sudo cp .env /etc/one-gateway/one-gateway.env   # chmod 600; owns root:root
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now one-gateway
+#
+# Bind to loopback; terminate TLS and proxy with Caddy/nginx (see README).
+
+[Unit]
+Description=one-gateway OpenAI-compatible AI backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/one-gateway
+EnvironmentFile=/etc/one-gateway/one-gateway.env
+Environment=HOST=127.0.0.1
+Environment=PORT=3005
+# trustProxy only when a reverse proxy on the same host sets X-Forwarded-For
+Environment=ONE_GATEWAY_TRUST_PROXY=true
+ExecStart=/usr/bin/node /opt/one-gateway/dist/bin/serve.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/one-gateway
+
+[Install]
+WantedBy=multi-user.target

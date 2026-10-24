@@ -1,5 +1,5 @@
 // Basic usage example — runs with: npm run example
-// Requires ONE_GATEWAY_TOKEN and optionally ONE_GATEWAY_URL in .env
+// Requires ONE_GATEWAY_API_KEY or GEMINI_API_KEY (or OpenClaw token) in .env
 
 import { complete } from "../dist/index.js";
 
