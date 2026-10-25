@@ -33,7 +33,7 @@
   "scripts": {
     "build": "tsup src/index.ts src/serve.ts src/bin/serve.ts --format esm,cjs --dts",
     "dev": "tsup src/index.ts src/serve.ts src/bin/serve.ts --format esm,cjs --dts --watch",
-    "test": "tsx --test src/validate.test.ts src/serve.security.test.ts src/upstream.test.ts src/client.upstream.test.ts src/serve.demo.test.ts",
+    "test": "tsx --test src/validate.test.ts src/serve.security.test.ts src/upstream.test.ts src/client.upstream.test.ts src/serve.demo.test.ts src/serve.callers.test.ts",
     "serve": "tsx --env-file-if-exists=.env src/bin/serve.ts",
     "smoke": "node scripts/smoke.mjs",
     "example": "node --env-file=.env examples/basic.mjs",

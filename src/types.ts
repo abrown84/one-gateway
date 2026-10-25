@@ -115,4 +115,31 @@ export type ServeOptions = {
   blockedPatterns?: RegExp[];
   /** Optional callback fired after every successful LLM response */
   onComplete?: (event: ConversationEvent) => void | Promise<void>;
+  /**
+   * Named server-side callers (e.g. internal apps) identified by their own Bearer key.
+   * A matching caller gets its own limit bucket and overrides instead of the public
+   * per-IP demo limits, and does not count toward `globalDailyCap`.
+   * Load from a JSON file via env `ONE_GATEWAY_CALLERS_FILE`.
+   */
+  callers?: CallerConfig[];
+};
+
+/** A trusted server-side caller with its own key and limits. */
+export type CallerConfig = {
+  /** Display / bucket name, e.g. "clearweb" */
+  name: string;
+  /** Hex SHA-256 of the caller's Bearer key (the raw key is never stored) */
+  keySha256: string;
+  rateLimit?: number;
+  burstLimit?: number;
+  dailyRequestCap?: number;
+  dailyTokenCap?: number;
+  maxPromptChars?: number;
+  maxOutputTokens?: number;
+  /**
+   * Trusted callers keep their own `system` messages, skip the demo app prompt and the
+   * demo prompt-injection keyword filter (their prompts embed arbitrary web text).
+   * SECURITY_RULES are still appended. Default false.
+   */
+  trusted?: boolean;
 };
