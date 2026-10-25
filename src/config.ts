@@ -1,4 +1,5 @@
-import type { GatewayConfig, ServeOptions } from "./types.js";
+import { readFileSync } from "node:fs";
+import type { CallerConfig, GatewayConfig, ServeOptions } from "./types.js";
 import { validateGatewayConfig } from "./validate.js";
 import {
   DEFAULT_CHAT_MODEL,
@@ -12,6 +13,27 @@ function parseFallbacks(v = ""): string[] {
 
 function parseList(v = ""): string[] {
   return v.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+/** Load caller configs from a JSON file (array of CallerConfig). Invalid entries are dropped. */
+export function loadCallers(file: string | undefined): CallerConfig[] {
+  if (!file) return [];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(file, "utf8"));
+  } catch (e) {
+    console.error(`[one-gateway] Could not read callers file: ${(e as Error).message}`);
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (c): c is CallerConfig =>
+      !!c &&
+      typeof c.name === "string" &&
+      c.name.length > 0 &&
+      typeof c.keySha256 === "string" &&
+      /^[0-9a-f]{64}$/i.test(c.keySha256)
+  );
 }
 
 function parseOptionalInt(v: string | undefined): number | undefined {
@@ -96,6 +118,7 @@ export function getServeOptionsFromEnv(
     globalDailyCap: parseOptionalInt(env.ONE_GATEWAY_GLOBAL_DAILY_CAP) ?? 2000,
     dailyTokenCap: parseOptionalInt(env.ONE_GATEWAY_DAILY_TOKEN_CAP) ?? 10_000,
     playground: env.ONE_GATEWAY_PLAYGROUND !== "0" && env.ONE_GATEWAY_PLAYGROUND !== "false",
+    callers: loadCallers(env.ONE_GATEWAY_CALLERS_FILE),
     apps: {
       playground: {
         systemPrompt:

@@ -1,6 +1,6 @@
 import http from "node:http";
 import crypto from "node:crypto";
-import type { AppConfig, GatewayConfig, ServeOptions, ConversationEvent } from "./types.js";
+import type { AppConfig, CallerConfig, GatewayConfig, ServeOptions, ConversationEvent } from "./types.js";
 import { validateGatewayConfig } from "./validate.js";
 import { chatCompletionsUrl, embeddingsUrl, DEFAULT_CHAT_MODEL } from "./upstream.js";
 import { renderPlaygroundPage } from "./playground.js";
@@ -149,6 +149,24 @@ function checkClientAuth(
   return timingSafeEqualStr(header, `Bearer ${authKey}`);
 }
 
+/** Match `Authorization: Bearer <key>` against configured callers by SHA-256 (constant time). */
+export function matchCaller(
+  req: http.IncomingMessage,
+  callers: CallerConfig[]
+): CallerConfig | undefined {
+  if (callers.length === 0) return undefined;
+  const header = req.headers.authorization ?? "";
+  const m = /^Bearer\s+(.+)$/i.exec(header);
+  if (!m) return undefined;
+  const digest = crypto.createHash("sha256").update(m[1].trim()).digest();
+  let found: CallerConfig | undefined;
+  for (const c of callers) {
+    const want = Buffer.from(c.keySha256.toLowerCase(), "hex");
+    if (want.length === digest.length && crypto.timingSafeEqual(want, digest)) found = c;
+  }
+  return found;
+}
+
 function upstreamHeaders(config: GatewayConfig): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${config.token}`,
@@ -208,6 +226,7 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions = {}): ht
     playground      = true,
     blockedPatterns = [],
     onComplete,
+    callers         = [],
   } = opts;
 
   if (!apps || Object.keys(apps).length === 0) {
@@ -291,26 +310,39 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions = {}): ht
       return jsonRes(res, 403, { error: "Forbidden." });
     }
 
-    if (!checkClientAuth(req, authKey)) {
+    const caller = matchCaller(req, callers);
+    if (!caller && !checkClientAuth(req, authKey)) {
       return jsonRes(res, 401, { error: "Unauthorized." });
     }
 
-    const ip = getIP(req, trustProxy);
-    const s = store.get(ip, rateWindowMs);
+    // Per-request limits: a known caller gets its own bucket + overrides; everyone else the demo limits.
+    const lim = {
+      rateLimit:       caller?.rateLimit       ?? rateLimit,
+      burstLimit:      caller?.burstLimit      ?? burstLimit,
+      dailyRequestCap: caller?.dailyRequestCap ?? dailyRequestCap,
+      dailyTokenCap:   caller?.dailyTokenCap   ?? dailyTokenCap,
+      maxPromptChars:  caller?.maxPromptChars  ?? maxPromptChars,
+      maxOutputTokens: caller?.maxOutputTokens ?? maxOutputTokens,
+    };
+    const trusted = caller?.trusted === true;
+    const consumeGlobal = () => (caller ? true : store.tryConsumeGlobal(globalDailyCap));
 
-    if (s.count >= rateLimit) {
+    const ip = getIP(req, trustProxy);
+    const s = store.get(caller ? `caller:${caller.name}` : ip, rateWindowMs);
+
+    if (s.count >= lim.rateLimit) {
       return jsonRes(res, 429, { error: DEMO_LIMIT_MSG });
     }
-    if (s.concurrent >= burstLimit) {
+    if (s.concurrent >= lim.burstLimit) {
       return jsonRes(res, 429, { error: DEMO_LIMIT_MSG });
     }
-    if (s.dailyRequests >= dailyRequestCap) {
+    if (s.dailyRequests >= lim.dailyRequestCap) {
       return jsonRes(res, 429, { error: DEMO_LIMIT_MSG });
     }
-    if (s.dailyTokens >= dailyTokenCap) {
+    if (s.dailyTokens >= lim.dailyTokenCap) {
       return jsonRes(res, 429, { error: DEMO_LIMIT_MSG });
     }
-    if (store.peekGlobal() >= globalDailyCap) {
+    if (!caller && store.peekGlobal() >= globalDailyCap) {
       return jsonRes(res, 429, { error: DEMO_LIMIT_MSG });
     }
 
@@ -329,7 +361,7 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions = {}): ht
       }
 
       if (isEmbed) {
-        if (!store.tryConsumeGlobal(globalDailyCap)) {
+        if (!consumeGlobal()) {
           return jsonRes(res, 429, { error: DEMO_LIMIT_MSG });
         }
         s.dailyRequests++;
@@ -342,8 +374,8 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions = {}): ht
           return jsonRes(res, 400, { error: "input must be a string or string array." });
         }
         const joined = Array.isArray(input) ? input.join("\n") : input;
-        if (joined.length > maxPromptChars) {
-          return jsonRes(res, 400, { error: `input too long (max ${maxPromptChars} chars).` });
+        if (joined.length > lim.maxPromptChars) {
+          return jsonRes(res, 400, { error: `input too long (max ${lim.maxPromptChars} chars).` });
         }
 
         let model =
@@ -397,20 +429,20 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions = {}): ht
         .slice(-MAX_MESSAGES)
         .filter((m) => m && typeof m.role === "string" && typeof m.content === "string")
         .map((m) => ({
-          role: (["user", "assistant"].includes(m.role) ? m.role : "user") as
-            | "user"
-            | "assistant",
-          content: m.content.slice(0, maxPromptChars),
+          role: ((trusted ? ["system", "user", "assistant"] : ["user", "assistant"]).includes(m.role)
+            ? m.role
+            : "user") as "user" | "assistant",
+          content: m.content.slice(0, lim.maxPromptChars),
         }));
 
       const lastUser = [...messages].reverse().find((m) => m.role === "user");
       if (!lastUser) return jsonRes(res, 400, { error: "No message provided." });
 
-      if (lastUser.content.length > maxPromptChars) {
-        return jsonRes(res, 400, { error: `Prompt too long (max ${maxPromptChars} chars).` });
+      if (lastUser.content.length > lim.maxPromptChars) {
+        return jsonRes(res, 400, { error: `Prompt too long (max ${lim.maxPromptChars} chars).` });
       }
 
-      if (allBlocked.some((p) => p.test(lastUser.content))) {
+      if (!trusted && allBlocked.some((p) => p.test(lastUser.content))) {
         return jsonRes(res, 400, { error: "Let's keep it on topic." });
       }
 
@@ -429,17 +461,17 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions = {}): ht
           ? parsed.max_tokens
           : (appCfg.maxTokens ?? safeConfig.maxTokens);
       const maxTokens = Math.min(
-        maxOutputTokens,
-        Math.max(1, Math.floor(Number(requestedMax) || maxOutputTokens))
+        lim.maxOutputTokens,
+        Math.max(1, Math.floor(Number(requestedMax) || lim.maxOutputTokens))
       );
 
       const estimatedTokens =
         messages.reduce((a, m) => a + Math.ceil(m.content.length / 4), 0) + maxTokens;
-      if (s.dailyTokens + estimatedTokens > dailyTokenCap) {
+      if (s.dailyTokens + estimatedTokens > lim.dailyTokenCap) {
         return jsonRes(res, 429, { error: DEMO_LIMIT_MSG });
       }
 
-      if (!store.tryConsumeGlobal(globalDailyCap)) {
+      if (!consumeGlobal()) {
         return jsonRes(res, 429, { error: DEMO_LIMIT_MSG });
       }
       s.dailyRequests++;
@@ -451,10 +483,14 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions = {}): ht
         max_tokens: maxTokens,
         stream: wantStream,
         messages: [
-          { role: "system", content: appCfg.systemPrompt + SECURITY_RULES },
+          { role: "system", content: (trusted ? "" : appCfg.systemPrompt) + SECURITY_RULES },
           ...messages,
         ],
       };
+      // Pass through OpenAI-compatible reasoning control (lets callers stop thinking tokens eating the cap).
+      if (typeof parsed.reasoning_effort === "string" && /^(none|low|medium|high)$/.test(parsed.reasoning_effort)) {
+        payload.reasoning_effort = parsed.reasoning_effort;
+      }
       if (typeof parsed.temperature === "number" && Number.isFinite(parsed.temperature)) {
         payload.temperature = Math.min(2, Math.max(0, parsed.temperature));
       }
@@ -590,6 +626,7 @@ export function serve(gatewayConfig: GatewayConfig, opts: ServeOptions = {}): ht
     console.log(
       `[one-gateway/serve] Client auth: ${authKey ? "enabled" : "off (public demo)"}`
     );
+    if (callers.length) console.log(`[one-gateway/serve] Callers: ${callers.map((c) => c.name).join(", ")}`);
     if (playground) console.log(`[one-gateway/serve] Playground: http://${host}:${port}/`);
     if (trustProxy) console.log("[one-gateway/serve] trustProxy enabled — using X-Forwarded-For");
   });

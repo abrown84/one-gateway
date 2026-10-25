@@ -226,6 +226,21 @@ GATEWAY_URL=http://127.0.0.1:3005 npm run smoke
 
 ---
 
+
+### Per-caller limits (internal apps)
+
+Give a server-side app its own key and limits instead of the public per-IP demo limits:
+
+```json
+// /etc/one-gateway/callers.json  (ONE_GATEWAY_CALLERS_FILE=/etc/one-gateway/callers.json)
+[{ "name": "clearweb", "keySha256": "<sha256 hex of the key>", "rateLimit": 60, "burstLimit": 8,
+   "dailyRequestCap": 2000, "dailyTokenCap": 3000000, "maxPromptChars": 12000, "maxOutputTokens": 2048, "trusted": true }]
+```
+
+The app sends `Authorization: Bearer <key>`. Matching callers get their own bucket, skip the global demo cap,
+and (if `trusted`) keep their `system` messages and skip the demo keyword filter. Unknown keys fall back to the
+public tier. Only the SHA-256 is stored: `printf %s "$KEY" | sha256sum`.
+
 ## Run on a Linux VPS (Docker + reverse proxy)
 
 ### Docker
